@@ -290,32 +290,46 @@
       });
     }else{
       (async function(){
-        try{
-          const[{initializeApp},{getDatabase,ref,onValue,runTransaction}]=await Promise.all([
-            import('https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js'),
-            import('https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js')
-          ]);
-          const app=initializeApp(FIREBASE_CONFIG);
-          const db=getDatabase(app);
-          const ticketsRef=ref(db,'tickets');
-          onValue(ticketsRef,snap=>{
-            const v=snap.val();
-            if(v===null||v===undefined){runTransaction(ticketsRef,cur=>cur===null?STARTING_TICKETS:cur);return;}
-            ticketCountEl.textContent=`${v} Tickets Left`;
-          });
-          chatBtn.addEventListener('click',()=>{
-            if(!localClicked){
-              runTransaction(ticketsRef,current=>{
-                if(current===null)return STARTING_TICKETS-1;
-                const next=current-1;
-                return next<=0?RESET_TO:next;
-              });
-              localStorage.setItem('sd_clicked','1');
-            }
-            window.open(WHATSAPP_LINK,'_blank');
-          });
-        }catch(err){console.error("Firebase error:",err);}
-      })();
+  try {
+    const [
+      { initializeApp },
+      { getDatabase, ref, onValue, runTransaction, set }
+    ] = await Promise.all([
+      import('https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js'),
+      import('https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js')
+    ]);
+
+    const app = initializeApp(FIREBASE_CONFIG);
+    const db = getDatabase(app);
+    const ticketsRef = ref(db, 'tickets');
+
+    // 💡 STEP 1: Ensure the database starts from 37 if empty
+    onValue(ticketsRef, (snap) => {
+      let value = snap.val();
+      if (value === null || value === undefined) {
+        set(ticketsRef, 37);
+        value = 37;
+      }
+      ticketCountEl.textContent = `${value} Tickets Left`;
+    });
+
+    // 💡 STEP 2: Button click logic
+    chatBtn.addEventListener('click', () => {
+      if (!localClicked) {
+        runTransaction(ticketsRef, (current) => {
+          if (current === null) return 37 - 1; // first write
+          const next = current - 1;
+          return next <= 0 ? 37 : next; // reset to 37 when 0
+        });
+        localStorage.setItem('sd_clicked', '1');
+      }
+      window.open(WHATSAPP_LINK, '_blank');
+    });
+  } catch (err) {
+    console.error("🔥 Firebase error:", err);
+    ticketCountEl.textContent = "Error loading tickets";
+  }
+})();
     }
   })();
   </script>
