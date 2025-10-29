@@ -287,7 +287,7 @@
 
     // --- Generate fingerprint-like ID ---
     const deviceID = btoa(
-      navigator.userAgent + navigator.language + Intl.DateTimeFormat().resolvedOptions().timeZone
+      navigator.userAgent + navigator.language + Intl.DateTimeFormat().resolvedOptions().timeZone + navigator.hardwareConcurrency
     ).replace(/[^a-z0-9]/gi, '').slice(0, 24);
 
     // --- Keep realtime ticket updates ---
@@ -301,31 +301,36 @@
     }, { onlyOnce: false });
 
     // --- Handle button click ---
-    chatBtn.addEventListener('click', async () => {
-      try {
-        const snap = await get(child(clickersRef, deviceID));
-        const alreadyClicked = snap.exists();
+    chatBtn.addEventListener('click', () => {
+      // Open WhatsApp first (direct user action)
+      window.open(WHATSAPP_LINK, '_blank');
 
-        if (!alreadyClicked) {
-          await runTransaction(ticketsRef, (current) => {
-            if (current === null) return STARTING_TICKETS - 1;
-            const next = current - 1;
-            return next <= 0 ? RESET_TO : next;
-          });
+      // Then update Firebase asynchronously
+      (async () => {
+        try {
+          const snap = await get(child(clickersRef, deviceID));
+          const alreadyClicked = snap.exists();
 
-          await set(child(clickersRef, deviceID), {
-            clicked: true,
-            time: Date.now(),
-            ua: navigator.userAgent
-          });
+          if (!alreadyClicked) {
+            // Reduce tickets
+            await runTransaction(ticketsRef, (current) => {
+              if (current === null) return STARTING_TICKETS - 1;
+              const next = current - 1;
+              return next <= 0 ? RESET_TO : next;
+            });
+
+            // Record this device
+            await set(child(clickersRef, deviceID), {
+              clicked: true,
+              time: Date.now(),
+              ua: navigator.userAgent
+            });
+          }
+        } catch (err) {
+          console.error('Error in chat button logic:', err);
+          ticketCountEl.textContent = "⚠️ " + err.message;
         }
-
-        // Always redirect
-        window.open(WHATSAPP_LINK, '_blank');
-      } catch (err) {
-        console.error('Error in chat button logic:', err);
-        ticketCountEl.textContent = "⚠️ Error loading tickets";
-      }
+      })();
     });
 
   }).catch(err => {
