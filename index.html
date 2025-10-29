@@ -246,7 +246,7 @@
     </div>
   </div>
 
-  <script>
+  <script type="module">
 (function(){
   const SLIDE_INTERVAL_MS = 7000;
   const WHATSAPP_LINK = "https://chat.whatsapp.com/BuiGgo5ps9b2EZXimQZsJS";
@@ -272,7 +272,7 @@
   let slideIndex = 0;
   const slideCount = slider.children.length;
   function goTo(i){ slideIndex=(i+slideCount)%slideCount; slider.style.transform=`translateX(-${slideIndex*100}%)`; }
-  setInterval(()=>goTo(slideIndex+1),SLIDE_INTERVAL_MS);
+  setInterval(()=>goTo(slideIndex+1), SLIDE_INTERVAL_MS);
 
   // --- Load Firebase dynamically ---
   Promise.all([
@@ -285,14 +285,14 @@
     const ticketsRef = ref(db, 'tickets');
     const clickersRef = ref(db, 'clickers');
 
-    // --- Generate fingerprint-like ID (robust) ---
+    // --- Generate unique device ID ---
     const deviceID = btoa(
       navigator.userAgent + navigator.language + navigator.platform +
       Intl.DateTimeFormat().resolvedOptions().timeZone +
-      (navigator.hardwareConcurrency || 0) + Math.random()
+      (navigator.hardwareConcurrency || 0)
     ).replace(/[^a-z0-9]/gi, '').slice(0, 24);
 
-    // --- Keep realtime ticket updates ---
+    // --- Realtime ticket updates ---
     onValue(ticketsRef, (snap) => {
       let val = snap.val();
       if (val === null || val === undefined) {
@@ -300,30 +300,25 @@
         val = STARTING_TICKETS;
       }
       ticketCountEl.textContent = `${val} Tickets Left`;
-    }, { onlyOnce: false });
+    });
 
     // --- Handle button click ---
     chatBtn.addEventListener('click', () => {
-      // Always open WhatsApp first (direct user action)
+      // Redirect immediately
       window.open(WHATSAPP_LINK, '_blank');
 
-      // Then reduce ticket asynchronously
+      // Update Firebase asynchronously
       (async () => {
         try {
           const snap = await get(child(clickersRef, deviceID));
           const alreadyClicked = snap.exists();
 
           if (!alreadyClicked) {
-            // Run transaction safely to prevent negative numbers
             await runTransaction(ticketsRef, (current) => {
-  console.log("Current tickets:", current);
-  if (current === null || current <= 0) return RESET_TO - 1;
-  const next = current - 1;
-  console.log("Next tickets:", next);
-  return next;
-});
+              if (current === null || current <= 0) return RESET_TO - 1;
+              return current - 1;
+            });
 
-            // Record this device
             await set(child(clickersRef, deviceID), {
               clicked: true,
               time: Date.now(),
@@ -332,7 +327,7 @@
           }
 
         } catch (err) {
-          console.error('Click button error:', err);
+          console.error('Error updating tickets:', err);
           ticketCountEl.textContent = "⚠️ Error loading tickets";
         }
       })();
