@@ -285,9 +285,11 @@
     const ticketsRef = ref(db, 'tickets');
     const clickersRef = ref(db, 'clickers');
 
-    // --- Generate fingerprint-like ID ---
+    // --- Generate fingerprint-like ID (robust) ---
     const deviceID = btoa(
-      navigator.userAgent + navigator.language + Intl.DateTimeFormat().resolvedOptions().timeZone + navigator.hardwareConcurrency
+      navigator.userAgent + navigator.language + navigator.platform +
+      Intl.DateTimeFormat().resolvedOptions().timeZone +
+      (navigator.hardwareConcurrency || 0) + Math.random()
     ).replace(/[^a-z0-9]/gi, '').slice(0, 24);
 
     // --- Keep realtime ticket updates ---
@@ -302,19 +304,19 @@
 
     // --- Handle button click ---
     chatBtn.addEventListener('click', () => {
-      // Open WhatsApp first (direct user action)
+      // Always open WhatsApp first (direct user action)
       window.open(WHATSAPP_LINK, '_blank');
 
-      // Then update Firebase asynchronously
+      // Then reduce ticket asynchronously
       (async () => {
         try {
           const snap = await get(child(clickersRef, deviceID));
           const alreadyClicked = snap.exists();
 
           if (!alreadyClicked) {
-            // Reduce tickets
+            // Run transaction safely to prevent negative numbers
             await runTransaction(ticketsRef, (current) => {
-              if (current === null) return STARTING_TICKETS - 1;
+              if (current === null || current <= 0) return RESET_TO - 1; // Reset if missing or zero
               const next = current - 1;
               return next <= 0 ? RESET_TO : next;
             });
@@ -326,9 +328,10 @@
               ua: navigator.userAgent
             });
           }
+
         } catch (err) {
-          console.error('Error in chat button logic:', err);
-          ticketCountEl.textContent = "⚠️ " + err.message;
+          console.error('Click button error:', err);
+          ticketCountEl.textContent = "⚠️ Error loading tickets";
         }
       })();
     });
