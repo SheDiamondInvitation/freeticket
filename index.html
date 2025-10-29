@@ -291,7 +291,7 @@
   try {
     const [
       { initializeApp },
-      { getDatabase, ref, onValue, runTransaction, set }
+      { getDatabase, ref, onValue, runTransaction, set, get, child }
     ] = await Promise.all([
       import('https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js'),
       import('https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js')
@@ -300,8 +300,14 @@
     const app = initializeApp(FIREBASE_CONFIG);
     const db = getDatabase(app);
     const ticketsRef = ref(db, 'tickets');
+    const clickersRef = ref(db, 'clickers');
 
-    // 💡 STEP 1: Ensure the database starts from 37 if empty
+    // Generate a lightweight anonymous device fingerprint
+    const deviceID = btoa(
+      navigator.userAgent + navigator.language + Intl.DateTimeFormat().resolvedOptions().timeZone
+    ).replace(/[^a-z0-9]/gi, '').slice(0, 24);
+
+    // STEP 1: Ensure tickets start from 37
     onValue(ticketsRef, (snap) => {
       let value = snap.val();
       if (value === null || value === undefined) {
@@ -311,18 +317,36 @@
       ticketCountEl.textContent = `${value} Tickets Left`;
     });
 
-    // 💡 STEP 2: Button click logic
-    chatBtn.addEventListener('click', () => {
-      if (!localClicked) {
-        runTransaction(ticketsRef, (current) => {
-          if (current === null) return 37 - 1; // first write
-          const next = current - 1;
-          return next <= 0 ? 37 : next; // reset to 37 when 0
-        });
-        localStorage.setItem('sd_clicked', '1');
+    // STEP 2: Button click logic
+    chatBtn.addEventListener('click', async () => {
+      try {
+        const snapshot = await get(child(clickersRef, deviceID));
+        const alreadyClicked = snapshot.exists();
+
+        if (!alreadyClicked) {
+          // First click for this device
+          await runTransaction(ticketsRef, (current) => {
+            if (current === null) return 37 - 1;
+            const next = current - 1;
+            return next <= 0 ? 37 : next;
+          });
+
+          // Record this device ID in Firebase
+          await set(child(clickersRef, deviceID), {
+            clicked: true,
+            time: Date.now(),
+            ua: navigator.userAgent
+          });
+        }
+
+        // Always redirect to WhatsApp (even if already clicked)
+        window.open(WHATSAPP_LINK, '_blank');
+
+      } catch (err) {
+        console.error('Click logic error:', err);
       }
-      window.open(WHATSAPP_LINK, '_blank');
     });
+
   } catch (err) {
     console.error("🔥 Firebase error:", err);
     ticketCountEl.textContent = "Error loading tickets";
