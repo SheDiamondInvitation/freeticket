@@ -316,10 +316,12 @@
           if (!alreadyClicked) {
             // Run transaction safely to prevent negative numbers
             await runTransaction(ticketsRef, (current) => {
-              if (current === null || current <= 0) return RESET_TO - 1; // Reset if missing or zero
-              const next = current - 1;
-              return next <= 0 ? RESET_TO : next;
-            });
+  console.log("Current tickets:", current);
+  if (current === null || current <= 0) return RESET_TO - 1;
+  const next = current - 1;
+  console.log("Next tickets:", next);
+  return next;
+});
 
             // Record this device
             await set(child(clickersRef, deviceID), {
